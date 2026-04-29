@@ -15,7 +15,7 @@ class ConversationSession:
 
 
 class SessionStore:
-    """Replace with Redis; dict for local dev."""
+    """In-memory store; bootstrap uses Redis when REDIS_URL is set."""
 
     def __init__(self) -> None:
         self._data: dict[str, ConversationSession] = {}

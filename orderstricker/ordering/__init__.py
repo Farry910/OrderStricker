@@ -3,12 +3,10 @@ from orderstricker.ordering.commands import (
     CommandResult,
     ConfirmOrder,
     OrderingCommand,
-    PayOrder,
     RemoveItemFromCart,
     StartCheckout,
 )
 from orderstricker.ordering.models import Cart, CartItem, Order, OrderStatus
-from orderstricker.ordering.service import OrderingService
 
 __all__ = [
     "AddItemToCart",
@@ -18,9 +16,7 @@ __all__ = [
     "ConfirmOrder",
     "Order",
     "OrderingCommand",
-    "OrderingService",
     "OrderStatus",
-    "PayOrder",
     "RemoveItemFromCart",
     "StartCheckout",
 ]

@@ -7,7 +7,6 @@ from orderstricker.catalog import CatalogRepository, Product
 from orderstricker.ordering.commands import (
     AddItemToCart,
     ConfirmOrder,
-    PayOrder,
     StartCheckout,
 )
 from orderstricker.ordering.models import OrderStatus
@@ -48,28 +47,24 @@ def test_add_item_rejects_over_max(svc, user_id, burger_id):
     assert "Maximum" in r.message
 
 
-def test_happy_path_checkout_confirm_pay(svc, user_id, burger_id):
+def test_happy_path_checkout_then_confirm_saved(svc, user_id, burger_id):
     assert svc.dispatch(AddItemToCart(user_id, burger_id, 2, "a")).ok
     assert svc.get_order(user_id).status == OrderStatus.CART_ACTIVE
     assert svc.dispatch(StartCheckout(user_id, "c")).ok
     assert svc.get_order(user_id).status == OrderStatus.CHECKOUT
     assert svc.dispatch(ConfirmOrder(user_id, "d")).ok
-    assert svc.get_order(user_id).status == OrderStatus.CONFIRMED
-    assert svc.dispatch(PayOrder(user_id, "p")).ok
-    assert svc.get_order(user_id).status == OrderStatus.PAID
+    assert svc.get_order(user_id).status == OrderStatus.FULFILLED
 
 
-def test_payment_after_confirm_only(svc, user_id, burger_id):
+def test_confirm_after_checkout_only(svc, user_id, burger_id):
     svc.dispatch(AddItemToCart(user_id, burger_id, 1, "a"))
-    svc.dispatch(StartCheckout(user_id, "c"))
-    r = svc.dispatch(PayOrder(user_id, "p"))
+    r = svc.dispatch(ConfirmOrder(user_id, "d"))
     assert r.ok is False
 
 
-def test_idempotent_pay(svc, user_id, burger_id):
+def test_idempotent_confirm(svc, user_id, burger_id):
     svc.dispatch(AddItemToCart(user_id, burger_id, 1, "a"))
     svc.dispatch(StartCheckout(user_id, "c"))
-    svc.dispatch(ConfirmOrder(user_id, "d"))
-    svc.dispatch(PayOrder(user_id, "same"))
-    r2 = svc.dispatch(PayOrder(user_id, "same"))
+    svc.dispatch(ConfirmOrder(user_id, "same"))
+    r2 = svc.dispatch(ConfirmOrder(user_id, "same"))
     assert r2.ok and "duplicate" in r2.message.lower()

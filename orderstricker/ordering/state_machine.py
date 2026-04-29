@@ -1,15 +1,16 @@
-"""Strict order lifecycle: no skips, no backward moves except cancel."""
+"""Strict order lifecycle: no skips except cancel."""
 
 from __future__ import annotations
 
 from orderstricker.ordering.models import OrderStatus
 
+# Confirm ends the flow at FULFILLED (selection saved via DB/chat); no separate payment stage.
 _FORWARD: dict[OrderStatus, frozenset[OrderStatus]] = {
     OrderStatus.DRAFT: frozenset({OrderStatus.CART_ACTIVE, OrderStatus.CANCELLED}),
     OrderStatus.CART_ACTIVE: frozenset({OrderStatus.CHECKOUT, OrderStatus.CANCELLED}),
-    OrderStatus.CHECKOUT: frozenset({OrderStatus.CONFIRMED, OrderStatus.CANCELLED}),
-    OrderStatus.CONFIRMED: frozenset({OrderStatus.PAID, OrderStatus.CANCELLED}),
-    OrderStatus.PAID: frozenset({OrderStatus.FULFILLED, OrderStatus.CANCELLED}),
+    OrderStatus.CHECKOUT: frozenset({OrderStatus.FULFILLED, OrderStatus.CANCELLED}),
+    OrderStatus.CONFIRMED: frozenset(),
+    OrderStatus.PAID: frozenset(),
     OrderStatus.FULFILLED: frozenset(),
     OrderStatus.CANCELLED: frozenset(),
 }

@@ -2,16 +2,35 @@ from __future__ import annotations
 
 import os
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from orderstricker.api.bootstrap import _catalog, ordering
-from orderstricker.ordering import commands as c
-from orderstricker.ordering.models import OrderStatus
+from orderstricker.api.bootstrap import _candidates, _catalog
+from orderstricker.conversation.ollama_translate import translate_user_message
+
+
+class ProductOut(BaseModel):
+    id: UUID
+    name: str
+    available: bool
+    list_price: str
+
+
+class ChatBody(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+
+class ChatOut(BaseModel):
+    reply: str
+    error: str | None = None
+    """True when assistant is unavailable or reply could not be applied; grid unchanged."""
+
+    degraded: bool = False
+    products: list[ProductOut]
 
 
 def create_app() -> FastAPI:
@@ -30,44 +49,13 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    class ProductOut(BaseModel):
-        id: UUID
-        name: str
-        available: bool
-        list_price: str
-
-    class CartItemOut(BaseModel):
-        product_id: UUID
-        quantity: int
-        unit_price: str
-
-    class CartOut(BaseModel):
-        id: UUID
-        user_id: UUID
-        items: list[CartItemOut]
-
-    class OrderOut(BaseModel):
-        id: UUID
-        user_id: UUID
-        status: OrderStatus
-        total_amount: str
-
-    class SessionOut(BaseModel):
-        cart: CartOut
-        order: OrderOut
-
-    class AddToCartBody(BaseModel):
-        product_id: UUID
-        quantity: int = Field(ge=1)
-
-    class ApiResult(BaseModel):
-        ok: bool
-        message: str
-        data: dict | None = None
-
     @app.get("/api/products", response_model=list[ProductOut])
-    def list_products() -> list[ProductOut]:
+    def list_products(user_id: UUID | None = Query(default=None)) -> list[ProductOut]:
         q = Decimal("0.01")
+        if user_id is not None:
+            products = _candidates.list_products(_catalog, user_id)
+        else:
+            products = _catalog.list_products()
         return [
             ProductOut(
                 id=p.id,
@@ -75,58 +63,48 @@ def create_app() -> FastAPI:
                 available=p.available,
                 list_price=str(p.list_price.quantize(q)),
             )
-            for p in _catalog.list_products()
+            for p in products
         ]
 
-    @app.get("/api/session/{user_id}", response_model=SessionOut)
-    def get_session(user_id: UUID) -> SessionOut:
-        cart = ordering.get_cart(user_id)
-        order = ordering.get_order(user_id)
-        return SessionOut(
-            cart=CartOut(
-                id=cart.id,
-                user_id=cart.user_id,
-                items=[
-                    CartItemOut(
-                        product_id=i.product_id,
-                        quantity=i.quantity,
-                        unit_price=i.unit_price,
-                    )
-                    for i in cart.items
-                ],
-            ),
-            order=OrderOut(
-                id=order.id,
-                user_id=order.user_id,
-                status=order.status,
-                total_amount=order.total_amount,
-            ),
+    @app.post("/api/session/{user_id}/chat", response_model=ChatOut)
+    def chat_nl(user_id: UUID, payload: ChatBody) -> ChatOut:
+        tr = translate_user_message(payload.message, _catalog)
+        q = Decimal("0.01")
+        prods_raw = _candidates.list_products(_catalog, user_id)
+
+        product_outs = [
+            ProductOut(
+                id=p.id,
+                name=p.name,
+                available=p.available,
+                list_price=str(p.list_price.quantize(q)),
+            )
+            for p in prods_raw
+        ]
+
+        if tr.degraded_mode:
+            return ChatOut(
+                reply=tr.reply,
+                error=None,
+                degraded=True,
+                products=product_outs,
+            )
+
+        _candidates.set_from_names(user_id, _catalog, tr.parsed.show_products)
+        return ChatOut(
+            reply=tr.reply,
+            error=None,
+            degraded=False,
+            products=[
+                ProductOut(
+                    id=p.id,
+                    name=p.name,
+                    available=p.available,
+                    list_price=str(p.list_price.quantize(q)),
+                )
+                for p in _candidates.list_products(_catalog, user_id)
+            ],
         )
-
-    def wrap(r: c.CommandResult) -> ApiResult:
-        return ApiResult(ok=r.ok, message=r.message, data=r.data)
-
-    @app.post("/api/session/{user_id}/cart/items", response_model=ApiResult)
-    def add_to_cart(user_id: UUID, body: AddToCartBody) -> ApiResult:
-        cmd = c.AddItemToCart(user_id, body.product_id, body.quantity, str(uuid4()))
-        return wrap(ordering.dispatch(cmd))
-
-    @app.delete("/api/session/{user_id}/cart/items/{product_id}", response_model=ApiResult)
-    def remove_from_cart(user_id: UUID, product_id: UUID) -> ApiResult:
-        cmd = c.RemoveItemFromCart(user_id, product_id, str(uuid4()))
-        return wrap(ordering.dispatch(cmd))
-
-    @app.post("/api/session/{user_id}/checkout/start", response_model=ApiResult)
-    def start_checkout(user_id: UUID) -> ApiResult:
-        return wrap(ordering.dispatch(c.StartCheckout(user_id, str(uuid4()))))
-
-    @app.post("/api/session/{user_id}/checkout/confirm", response_model=ApiResult)
-    def confirm_order(user_id: UUID) -> ApiResult:
-        return wrap(ordering.dispatch(c.ConfirmOrder(user_id, str(uuid4()))))
-
-    @app.post("/api/session/{user_id}/checkout/pay", response_model=ApiResult)
-    def pay(user_id: UUID) -> ApiResult:
-        return wrap(ordering.dispatch(c.PayOrder(user_id, str(uuid4()))))
 
     return app
 

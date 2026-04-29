@@ -1,0 +1,26 @@
+Metadata-Version: 2.4
+Name: orderstricker
+Version: 0.1.0
+Summary: Catalog browsing and chat-driven selection order flow (Ollama translator); optional Mongo/Redis persistence
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.2.0
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: uvicorn[standard]>=0.32.0
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: pymongo>=4.6.0
+Requires-Dist: redis>=5.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+
+# OrderSticker / OrderStricker
+This is OLLAMA based ordering service.
+
+## Persistence
+
+- **`MONGO_URI`** (alias `ORDERSTRICKER_MONGO_URI`) — When set (e.g. `mongodb://localhost:27017`), products and cart/order snapshots use MongoDB. Optional **`ORDERSTRICKER_MONGO_DB`** (default `orderstricker`).
+- **`REDIS_URL`** (`ORDERSTRICKER_REDIS_URL`) — When set, caches product list JSON (`list_products`), command idempotency + payment dedup (with Mongo active), and conversation overlays. TTLs configurable via `ORDERSTRICKER_CATALOG_CACHE_SEC` / `ORDERSTRICKER_CONVERSATION_REDIS_TTL_SEC`.
+
+If neither URI is set, catalog and sessions remain in-memory (good for tests and local hacks).
+
+Compose: `docker compose up -d` for MongoDB and Redis on default ports (`docker-compose.yml`).
