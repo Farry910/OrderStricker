@@ -1,4 +1,4 @@
-import type { ApiResult, Product, Session } from "./types";
+import type { ChatResponse, Product } from "./types";
 
 function uid(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -26,56 +26,17 @@ async function parse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function fetchProducts(): Promise<Product[]> {
-  const res = await fetch("/api/products");
+/** Candidate products for this shopper (defaults to full catalog server-side until chat narrows). */
+export async function fetchProducts(userId: string): Promise<Product[]> {
+  const res = await fetch(`/api/products?user_id=${encodeURIComponent(userId)}`);
   return parse(res);
 }
 
-export async function fetchSession(userId: string): Promise<Session> {
-  const res = await fetch(`/api/session/${userId}`);
-  return parse(res);
-}
-
-export async function addToCart(
-  userId: string,
-  productId: string,
-  quantity: number,
-): Promise<ApiResult> {
-  const res = await fetch(`/api/session/${userId}/cart/items`, {
+export async function sendChatMessage(userId: string, message: string): Promise<ChatResponse> {
+  const res = await fetch(`/api/session/${userId}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ product_id: productId, quantity }),
-  });
-  return parse(res);
-}
-
-export async function removeFromCart(
-  userId: string,
-  productId: string,
-): Promise<ApiResult> {
-  const res = await fetch(`/api/session/${userId}/cart/items/${productId}`, {
-    method: "DELETE",
-  });
-  return parse(res);
-}
-
-export async function startCheckout(userId: string): Promise<ApiResult> {
-  const res = await fetch(`/api/session/${userId}/checkout/start`, {
-    method: "POST",
-  });
-  return parse(res);
-}
-
-export async function confirmOrder(userId: string): Promise<ApiResult> {
-  const res = await fetch(`/api/session/${userId}/checkout/confirm`, {
-    method: "POST",
-  });
-  return parse(res);
-}
-
-export async function payOrder(userId: string): Promise<ApiResult> {
-  const res = await fetch(`/api/session/${userId}/checkout/pay`, {
-    method: "POST",
+    body: JSON.stringify({ message }),
   });
   return parse(res);
 }
